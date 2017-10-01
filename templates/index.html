@@ -1,0 +1,409 @@
+<html>
+<head>
+<link rel="stylesheet" type="text/css" href="static/bootstrap.min.css">
+<link rel="stylesheet" type="text/css" href="static/bootstrap-theme.min.css">
+<link rel="stylesheet" type="text/css" href="static/bootstrap-slider.min.css">
+<script src="static/jquery-3.2.1.min.js"></script> 
+<script src="static/bootstrap-slider.js"></script> 
+<script src="static/bootstrap.min.js"></script>
+<script>
+var joystick_activated = false;
+var joystick_x = 200;
+var joystick_y = 200;
+var joystick_center_x = 200;
+var joystick_center_y = 200;
+var max_joystick_distance = 80;
+var dist_from_center = 0;
+
+
+$( document ).ready(function() {
+    var joystick_offset = $("#direction_joystick").offset();
+    
+    var sock_conn = new WebSocket("ws://192.168.1.220/active_update");
+    
+    // Log errors
+    sock_conn.onerror = function (error) {
+        console.log('WebSocket Error: ' + JSON.stringify(error));
+    };
+
+    // Log messages from the server
+    sock_conn.onmessage = function (e) {
+        console.log('Server Message: ' + e.data);
+    };
+    
+    function handleJoystickMove(eventType,event) {
+        if (joystick_activated) {
+            if(eventType == 'touchmove') {
+                pageX = event.changedTouches[0].clientX;
+                pageY = event.changedTouches[0].clientY;
+            } else {
+                if(event.preventDefault){ event.preventDefault(); }
+                pageX = event.pageX;
+                pageY = event.pageY;
+            }
+            joystick_x = pageX - joystick_offset.left;
+            joystick_y = pageY - joystick_offset.top;
+            dist_from_center = Math.sqrt(Math.pow((joystick_x - joystick_center_x),2) + Math.pow((joystick_y - joystick_center_y),2));
+            if (dist_from_center > max_joystick_distance) {
+                var norm = dist_from_center;
+                var cursor_x_from_center = joystick_x - joystick_center_x;
+                var cursor_y_from_center = joystick_y - joystick_center_y;
+                joystick_x=(cursor_x_from_center/norm)*max_joystick_distance + joystick_center_x;
+                joystick_y=(cursor_y_from_center/norm)*max_joystick_distance + joystick_center_y;
+            }
+        } else {
+            joystick_x = joystick_center_x;
+            joystick_y = joystick_center_y;
+        }
+        $("#moveable_joystick").attr("cx",joystick_x).attr("cy",joystick_y);
+        if (sock_conn.readyState === sock_conn.OPEN) {
+            sock_conn.send('{ "mode":"steering", "speed":'+dist_from_center+',direction="fwd", "motor1":"100", "motor2":"100", "motor3":"100", "motor4":"100"}');
+            console.log("WebSocket Request Sent. ");
+        } else {
+            var connection_states = ['CONNECTING','OPEN','CLOSING','CLOSED'];
+            console.log("WebSocket Connection Status: " + connection_states[sock_conn.readyState]);
+        }
+    }
+
+    $("#speed_slider,#duration_slider,.v_slider input").slider({
+        reversed : true
+    });
+    
+    $("#debug_servo_2").bind("change",function () {
+        compliment_value = 360.0 - $("#debug_servo_2").slider('getValue');
+        $("#debug_servo_3").slider("setValue",compliment_value);
+    });
+    
+    $("#moveable_joystick").mousedown(function() {
+        joystick_activated = true;
+    }).bind("touchstart", function() {
+        joystick_activated = true;
+    });
+    
+    $("body").mousemove(function (event) {
+        handleJoystickMove('mousemove', event)
+    }).bind('touchmove',function (event) {
+        handleJoystickMove('touchmove', event)
+    }).mouseup(function() {
+        joystick_activated = false;
+    }).bind("touchend",function() {
+        joystick_activated = false;
+        $("#moveable_joystick").attr("cx",joystick_center_x).attr("cy",joystick_center_y);
+    });
+    
+    $('.toggle-group a').on('click', function(){
+        var sel = $(this).data('title');
+        var tog = $(this).data('toggle');
+        $('#'+tog).prop('value', sel);
+        
+        $('a[data-toggle="'+tog+'"]').not('[data-title="'+sel+'"]').removeClass('active').addClass('notActive');
+        $('a[data-toggle="'+tog+'"][data-title="'+sel+'"]').removeClass('notActive').addClass('active');
+        
+        if (sel == 'debug') {
+            $('#speed_controls').fadeIn();
+            $('#direction_controls').fadeOut();
+            $('#motor_debug_controls').fadeIn();
+            $('#duration_controls').fadeIn();
+            $('#motor_debug_start').fadeIn();
+            $('#servo_debug_start').fadeOut();
+            $('#servo_debug_controls').fadeOut();
+        } 
+        else if (sel == 'driving') {
+            $('#speed_controls').fadeOut();
+            $('#direction_controls').fadeIn();
+            $('#motor_debug_controls').fadeOut();
+            $('#duration_controls').fadeOut();
+            $('#motor_debug_start').fadeOut();
+            $('#servo_debug_start').fadeOut();
+            $('#servo_debug_controls').fadeOut();
+        }
+        else if (sel == 'servos') {
+            $('#speed_controls').fadeOut();
+            $('#direction_controls').fadeOut();
+            $('#motor_debug_controls').fadeOut();
+            $('#duration_controls').fadeOut();
+            $('#motor_debug_start').fadeOut();
+            $('#servo_debug_start').fadeIn();
+            $('#servo_debug_controls').fadeIn();
+        }
+        
+    });
+    
+    $('#servo_debug_submission').on('click', function(){$('#debug_servo_settings').submit();});
+    
+    $('#motor_debug_submission').on('click', function(){
+        var field = $('<input></input>');
+        field.attr("type", "hidden");
+        field.attr("name", "speed");
+        field.attr("value", $('#speed_slider').data('slider-value'));
+        $('#debug_motor_settings').append(field);
+        field = $('<input></input>');
+        field.attr("type", "hidden");
+        field.attr("name", "duration");
+        field.attr("value", $('#duration_slider').data('slider-value'));
+        $('#debug_motor_settings').append(field);
+        $('#debug_motor_settings').submit();
+    });
+});
+
+
+
+</script>
+<style>
+body {
+    background: #000 url("static/blue_bkg.jpg") no-repeat right top;
+    background-size:100%;
+    background-attachment: fixed;
+}
+
+#mode_selection_controls {
+    position: fixed;
+    top: 40;
+    right: 60;
+}
+
+#motor_debug_controls {
+    color: #FFF;
+    text-align:center;
+    position: fixed;
+    bottom: 100;
+    right: 30%;
+    display:none;
+}
+
+#duration_controls {
+    position: fixed;
+    bottom: 40;
+    left: 150;
+    display:none;
+}
+
+#speed_controls {
+    position: fixed;
+    bottom: 40;
+    left: 60;
+    display:none;
+}
+
+#servo_debug_controls {
+    position: fixed;
+    bottom: 40;
+    left: 6%;
+    display:none;
+    width: 1000px;
+}
+
+#direction_controls {
+    position: fixed;
+    bottom: 200;
+    right: 300;
+    height: 200px;
+    width: 200px;
+}  
+
+#motor_debug_start {
+    position: fixed;
+    bottom: 100;
+    right: 100;
+    display:none;
+}
+
+#servo_debug_start {
+    position: fixed;
+    bottom: 100;
+    right: 100;
+    display:none;
+}
+  
+.horizontal_center {
+    color: #FFF;
+    text-align:center;
+}
+
+.moveable_joystick {
+    cursor: move;
+}
+
+/*#radioBtn .notActive{
+    color: #EEE;
+}*/
+
+</style>
+</head>
+<body>
+<div id="mode_selection_controls">
+    <div class="input-group toggle-group">
+        <div id="mode_radio_btn" class="btn-group">
+            <a class="btn btn-primary btn-sm active" data-toggle="control_mode" data-title="driving">Driving</a>
+            <a class="btn btn-primary btn-sm notActive" data-toggle="control_mode" data-title="servos">Servos</a>
+            <a class="btn btn-primary btn-sm notActive" data-toggle="control_mode" data-title="debug">Debug</a>
+            <a class="btn btn-primary btn-sm notActive" data-toggle="control_mode" data-title="video">Video</a>
+            <a class="btn btn-primary btn-sm notActive" data-toggle="control_mode" data-title="demo">Demo</a>
+        </div>
+        <input type="hidden" name="control_mode" id="control_mode">
+    </div>
+</div>
+<div id="speed_controls">
+    <div id="speed_slider_container" class="horizontal_center">
+        Max Speed
+        <br />
+        <input id="speed_slider" type="text" data-slider-min="0" data-slider-max="100" data-slider-step="1" data-slider-value="35" data-slider-orientation="vertical"/>
+        <br />
+        Stopped
+    </div>
+</div>
+<div id="duration_controls">
+    <div id="duration_slider_container" class="horizontal_center">
+        5 Seconds
+        <br />
+        <input id="duration_slider" type="text" data-slider-min="0" data-slider-max="5" data-slider-step="0.1" data-slider-value="2" data-slider-orientation="vertical"/>
+        <br />
+        0 Seconds
+    </div>
+</div>
+
+<div id="direction_controls">
+    <div id="direction_joystick" class="horizontal_center">
+        <svg height="400" width="400">
+          <circle cx="200" cy="200" r="80" stroke="#EEE" stroke-width="3" stroke-opacity="0.5" fill="#FFF" fill-opacity="0.15"/>
+          <circle id="moveable_joystick" cx="200" cy="200" r="40" stroke="#FFF" stroke-width="3" stroke-opacity="0.5" fill="#FFF" fill-opacity="0.15"/>
+        </svg>
+    </div>
+</div>
+
+<div id="servo_debug_controls">
+    <form id="debug_servo_settings"  method="post">
+        <div id="debug_servo_1_container" class="horizontal_center col-xs-1 v_slider">
+            330 degrees
+            <br />
+            <input id="debug_servo_1" name="debug_servo_1" type="text" data-slider-min="30" data-slider-max="330" data-slider-step="0.1" data-slider-value="180" data-slider-orientation="vertical"/>
+            <br />
+            30 degrees
+            <br />
+            Base
+        </div>
+        <div id="debug_servo_2_container" class="horizontal_center col-xs-1 v_slider">
+            330 degrees
+            <br />
+            <input id="debug_servo_2" name="debug_servo_2" type="text" data-slider-min="30" data-slider-max="330" data-slider-step="0.1" data-slider-value="180" data-slider-orientation="vertical"/>
+            <br />
+            30 degrees
+            <br />
+            Left Shoulder
+        </div>
+        <div id="debug_servo_3_container" class="horizontal_center col-xs-1 v_slider">
+            330 degrees
+            <br />
+            <input id="debug_servo_3" name="debug_servo_3" type="text" data-slider-enabled="false" data-slider-min="30" data-slider-max="330" data-slider-step="0.1" data-slider-value="180" data-slider-orientation="vertical"/>
+            <br />
+            30 degrees
+            <br />
+            Right Shoulder
+        </div>
+        <div id="debug_servo_4_container" class="horizontal_center col-xs-1 v_slider">
+            330 degrees
+            <br />
+            <input id="debug_servo_4" name="debug_servo_4" type="text" data-slider-min="30" data-slider-max="330" data-slider-step="0.1" data-slider-value="180" data-slider-orientation="vertical"/>
+            <br />
+            30 degrees
+            <br />
+            Elbow
+        </div>
+        <div id="debug_servo_5_container" class="horizontal_center col-xs-1 v_slider">
+            330 degrees
+            <br />
+            <input id="debug_servo_5" name="debug_servo_5" type="text" data-slider-min="30" data-slider-max="330" data-slider-step="0.1" data-slider-value="180" data-slider-orientation="vertical"/>
+            <br />
+            30 degrees
+            <br />
+            Forearm
+        </div>
+        <div id="debug_servo_6_container" class="horizontal_center col-xs-1 v_slider">
+            330 degrees
+            <br />
+            <input id="debug_servo_6" name="debug_servo_6" type="text" data-slider-min="30" data-slider-max="330" data-slider-step="0.1" data-slider-value="180" data-slider-orientation="vertical"/>
+            <br />
+            30 degrees
+            <br />
+            Wrist Tilt
+        </div>
+        <div id="debug_servo_7_container" class="horizontal_center col-xs-1 v_slider">
+            330 degrees
+            <br />
+            <input id="debug_servo_7" name="debug_servo_7" type="text" data-slider-min="30" data-slider-max="330" data-slider-step="0.1" data-slider-value="180" data-slider-orientation="vertical"/>
+            <br />
+            30 degrees
+            <br />
+            Wrist Roll
+        </div>
+        <div id="debug_servo_8_container" class="horizontal_center col-xs-1 v_slider">
+            330 degrees
+            <br />
+            <input id="debug_servo_8" name="debug_servo_8" type="text" data-slider-min="30" data-slider-max="330" data-slider-step="0.1" data-slider-value="180" data-slider-orientation="vertical"/>
+            <br />
+            30 degrees
+            <br />
+            Claw
+        </div>
+        <input type="hidden" name="request_type" id="request_type" value="servo_positions"> 
+    </form>
+</div>
+
+<div id="motor_debug_controls">
+    <form id="debug_motor_settings" method="post">
+        <div class="col-xs-6">
+            Front Left:<br \>
+            <div class="input-group toggle-group">
+                <div id="fl_motor_radio_btn" class="btn-group">
+                    <a class="btn btn-primary btn-sm active" data-toggle="debug_fl_motor" data-title="fwd">Forward</a>
+                    <a class="btn btn-primary btn-sm notActive" data-toggle="debug_fl_motor" data-title="rev">Reverse</a>
+                    <a class="btn btn-primary btn-sm notActive" data-toggle="debug_fl_motor" data-title="off">Off</a>
+                </div>
+                <input type="hidden" name="debug_fl_motor" id="debug_fl_motor" value="fwd"> 
+            </div>
+            <br \>
+            Rear Left:<br \>
+            <div class="input-group toggle-group">
+                <div id="bl_motor_radio_btn" class="btn-group">
+                    <a class="btn btn-primary btn-sm active" data-toggle="debug_bl_motor" data-title="fwd">Forward</a>
+                    <a class="btn btn-primary btn-sm notActive" data-toggle="debug_bl_motor" data-title="rev">Reverse</a>
+                    <a class="btn btn-primary btn-sm notActive" data-toggle="debug_bl_motor" data-title="off">Off</a>
+                </div>
+                <input type="hidden" name="debug_bl_motor" id="debug_bl_motor" value="fwd"> 
+            </div>
+        </div>
+        <div class="col-xs-6">
+            Front Right:<br \>
+            <div class="input-group toggle-group">
+                <div id="fr_motor_radio_btn" class="btn-group">
+                    <a class="btn btn-primary btn-sm active" data-toggle="debug_fr_motor" data-title="fwd">Forward</a>
+                    <a class="btn btn-primary btn-sm notActive" data-toggle="debug_fr_motor" data-title="rev">Reverse</a>
+                    <a class="btn btn-primary btn-sm notActive" data-toggle="debug_fr_motor" data-title="off">Off</a>
+                </div>
+                <input type="hidden" name="debug_fr_motor" id="debug_fr_motor" value="fwd"> 
+            </div>
+            <br \>
+            Rear Right:<br \>
+            <div class="input-group toggle-group">
+                <div id="bl_motor_radio_btn" class="btn-group">
+                    <a class="btn btn-primary btn-sm active" data-toggle="debug_br_motor" data-title="fwd">Forward</a>
+                    <a class="btn btn-primary btn-sm notActive" data-toggle="debug_br_motor" data-title="rev">Reverse</a>
+                    <a class="btn btn-primary btn-sm notActive" data-toggle="debug_br_motor" data-title="off">Off</a>
+                </div>
+                <input type="hidden" name="debug_br_motor" id="debug_br_motor" value="fwd"> 
+            </div>
+        </div>
+        <input type="hidden" name="request_type" id="request_type" value="motor_controls"> 
+    </form>
+</div>
+
+<div id="motor_debug_start">
+    <input id="motor_debug_submission" type="button" class="btn btn-warning" value="Run Motor(s)">
+</div>
+
+<div id="servo_debug_start">
+    <input id="servo_debug_submission" type="button" class="btn btn-warning" value="Move Servos(s)">
+</div>
+<!--{{recieved_request}}-->
+</body>
+</html>
