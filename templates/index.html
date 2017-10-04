@@ -14,6 +14,7 @@ var joystick_center_x = 200;
 var joystick_center_y = 200;
 var max_joystick_distance = 80;
 var dist_from_center = 0;
+var basic_movement_activated = false;
 
 
 $( document ).ready(function() {
@@ -64,6 +65,38 @@ $( document ).ready(function() {
             console.log("WebSocket Connection Status: " + connection_states[sock_conn.readyState]);
         }
     }
+    
+    function handleBasicMotorMovement(speed,direction) {
+        var motor1 = speed;
+        var motor2 = speed;
+        var motor3 = speed;
+        var motor4 = speed;
+        var connection_states = ['CONNECTING','OPEN','CLOSING','CLOSED'];
+        if(direction == 'backward') {
+            motor1 *= -1;
+            motor2 *= -1;
+            motor3 *= -1;
+            motor4 *= -1;
+        }
+        if(direction == 'right') {
+            motor2 *= -1;
+            motor3 *= -1;
+        }
+        if(direction == 'left') {
+            motor1 *= -1;
+            motor4 *= -1;
+        }
+        if(basic_movement_activated){
+            console.log('{ "mode":"steering", "motor1":"'+motor1+'", "motor2":"'+motor2+'", "motor3":"'+motor3+'", "motor4":"'+motor4+'"}');
+            if (sock_conn.readyState === sock_conn.OPEN) {
+                sock_conn.send('{ "mode":"steering", "motor1":"'+motor1+'", "motor2":"'+motor2+'", "motor3":"'+motor3+'", "motor4":"'+motor4+'"}');
+                console.log("WebSocket Request Sent. ");
+            } else {
+                //console.log("WebSocket Connection Status: " + connection_states[sock_conn.readyState]);
+            }
+            setTimeout(function(){ handleBasicMotorMovement(speed,direction); }, 10);
+        }
+    }
 
     $("#speed_slider,#duration_slider,.v_slider input").slider({
         reversed : true
@@ -81,9 +114,9 @@ $( document ).ready(function() {
     });
     
     $("body").mousemove(function (event) {
-        handleJoystickMove('mousemove', event)
+        //handleJoystickMove('mousemove', event)
     }).bind('touchmove',function (event) {
-        handleJoystickMove('touchmove', event)
+        //handleJoystickMove('touchmove', event)
     }).mouseup(function() {
         joystick_activated = false;
     }).bind("touchend",function() {
@@ -107,6 +140,7 @@ $( document ).ready(function() {
             $('#motor_debug_start').fadeIn();
             $('#servo_debug_start').fadeOut();
             $('#servo_debug_controls').fadeOut();
+            $('#basic_direction_controls').fadeOut();
         } 
         else if (sel == 'driving') {
             $('#speed_controls').fadeOut();
@@ -116,6 +150,7 @@ $( document ).ready(function() {
             $('#motor_debug_start').fadeOut();
             $('#servo_debug_start').fadeOut();
             $('#servo_debug_controls').fadeOut();
+            $('#basic_direction_controls').fadeOut();
         }
         else if (sel == 'servos') {
             $('#speed_controls').fadeOut();
@@ -125,6 +160,17 @@ $( document ).ready(function() {
             $('#motor_debug_start').fadeOut();
             $('#servo_debug_start').fadeIn();
             $('#servo_debug_controls').fadeIn();
+            $('#basic_direction_controls').fadeOut();
+        }
+        else if (sel=='basic_driving') {
+            $('#speed_controls').fadeIn();
+            $('#direction_controls').fadeOut();
+            $('#motor_debug_controls').fadeOut();
+            $('#duration_controls').fadeOut();
+            $('#motor_debug_start').fadeOut();
+            $('#servo_debug_start').fadeOut();
+            $('#servo_debug_controls').fadeOut();
+            $('#basic_direction_controls').fadeIn();
         }
         
     });
@@ -143,6 +189,31 @@ $( document ).ready(function() {
         field.attr("value", $('#duration_slider').data('slider-value'));
         $('#debug_motor_settings').append(field);
         $('#debug_motor_settings').submit();
+    });
+    
+    $("#left_basic_move").on('mousedown touchstart',function() {
+        basic_movement_activated = true;
+        handleBasicMotorMovement($('#speed_slider').data('slider-value'),'left');
+    }).on('mouseup mouseout touchend touchcancel',function() {
+        basic_movement_activated = false;
+    });
+    $("#right_basic_move").on('mousedown touchstart',function() {
+        basic_movement_activated = true;
+        handleBasicMotorMovement($('#speed_slider').data('slider-value'),'right');
+    }).on('mouseup mouseout touchend touchcancel',function() {
+        basic_movement_activated = false;
+    });
+    $("#forward_basic_move").on('mousedown touchstart',function() {
+        basic_movement_activated = true;
+        handleBasicMotorMovement($('#speed_slider').data('slider-value'),'forward');
+    }).on('mouseup mouseout touchend touchcancel',function() {
+        basic_movement_activated = false;
+    });
+    $("#backward_basic_move").on('mousedown touchstart',function() {
+        basic_movement_activated = true;
+        handleBasicMotorMovement($('#speed_slider').data('slider-value'),'backward');
+    }).on('mouseup mouseout touchend touchcancel',function() {
+        basic_movement_activated = false;
     });
 });
 
@@ -182,7 +253,6 @@ body {
     position: fixed;
     bottom: 40;
     left: 60;
-    display:none;
 }
 
 #servo_debug_controls {
@@ -193,12 +263,22 @@ body {
     width: 1000px;
 }
 
+#basic_direction_controls {
+    position: fixed;
+    bottom: 100;
+    right: 0;
+    left: 0;
+    margin-right: auto;
+    margin-left: auto;
+}
+
 #direction_controls {
     position: fixed;
     bottom: 200;
     right: 300;
     height: 200px;
     width: 200px;
+    display:none;
 }  
 
 #motor_debug_start {
@@ -234,7 +314,8 @@ body {
 <div id="mode_selection_controls">
     <div class="input-group toggle-group">
         <div id="mode_radio_btn" class="btn-group">
-            <a class="btn btn-primary btn-sm active" data-toggle="control_mode" data-title="driving">Driving</a>
+            <a class="btn btn-primary btn-sm active" data-toggle="control_mode" data-title="basic_driving">Basic Driving</a>
+            <a class="btn btn-primary btn-sm notActive" data-toggle="control_mode" data-title="driving">Driving</a>
             <a class="btn btn-primary btn-sm notActive" data-toggle="control_mode" data-title="servos">Servos</a>
             <a class="btn btn-primary btn-sm notActive" data-toggle="control_mode" data-title="debug">Debug</a>
             <a class="btn btn-primary btn-sm notActive" data-toggle="control_mode" data-title="video">Video</a>
@@ -262,11 +343,30 @@ body {
     </div>
 </div>
 
+<div id="basic_direction_controls">
+    <div id="direction_buttons" class="horizontal_center">
+        <svg height="400" width="600">
+            <polygon points="150,110 50,210 150,310" stroke="#EEE" stroke-width="10" stroke-opacity="0.5" stroke-linejoin="round"fill="#FFF" fill-opacity="0" />
+            <polygon id="left_basic_move" points="145,120 55,210 145,310" outside" fill="#FFF" fill-opacity="0.15" />
+            
+            <polygon points="200,145 400,145 300,45" stroke="#EEE" stroke-width="10" stroke-opacity="0.5" stroke-linejoin="round"fill="#FFF" fill-opacity="0" />
+            <polygon id="forward_basic_move" points="210,140 390,140 300,50" outside" fill="#FFF" fill-opacity="0.15" />
+            
+            <polygon points="450,110 550,210 450,310" stroke="#EEE" stroke-width="10" stroke-opacity="0.5" stroke-linejoin="round"fill="#FFF" fill-opacity="0" />
+            <polygon id="right_basic_move" points="455,120 545,210 455,310" outside" fill="#FFF" fill-opacity="0.15" />
+            
+            <polygon points="200,275 400,275 300,375" stroke="#EEE" stroke-width="10" stroke-opacity="0.5" stroke-linejoin="round"fill="#FFF" fill-opacity="0" />
+            <polygon id="backward_basic_move" points="210,280 390,280 300,370" outside" fill="#FFF" fill-opacity="0.15" />
+            
+        </svg>
+    </div>
+</div>
+
 <div id="direction_controls">
     <div id="direction_joystick" class="horizontal_center">
         <svg height="400" width="400">
-          <circle cx="200" cy="200" r="80" stroke="#EEE" stroke-width="3" stroke-opacity="0.5" fill="#FFF" fill-opacity="0.15"/>
-          <circle id="moveable_joystick" cx="200" cy="200" r="40" stroke="#FFF" stroke-width="3" stroke-opacity="0.5" fill="#FFF" fill-opacity="0.15"/>
+            <circle cx="200" cy="200" r="80" stroke="#EEE" stroke-width="3" stroke-opacity="0.5" fill="#FFF" fill-opacity="0.15"/>
+            <circle id="moveable_joystick" cx="200" cy="200" r="40" stroke="#FFF" stroke-width="3" stroke-opacity="0.5" fill="#FFF" fill-opacity="0.15"/>
         </svg>
     </div>
 </div>
