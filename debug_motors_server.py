@@ -95,15 +95,15 @@ def live_motor_update(settings, call_id):
         GPIO.output(pin, False)
     time_elapsed = 0
     while time_elapsed < duration:
-        if motor_speed_update_id call_id > call_id:
+        if motor_speed_update_id > call_id:
             return 'New Order!'
         for pin, pin_value in motor_pins.items():
             GPIO.output(pin, pin_value)
-        for i in range(100)
+        for i in range(100):
             time.sleep(0.001)
             time_elapsed += 0.001
             for pin, pin_value in motor_pins.items():
-                if pin_value != False and pin_value / 1000 < time_elapsed
+                if pin_value != False and pin_value / 1000 < time_elapsed:
                     GPIO.output(pin, False)
     return 'Success!'
     
