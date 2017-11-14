@@ -7,6 +7,12 @@
 <script src="static/socket.io.min.js"></script>
 <script src="static/bootstrap-slider.js"></script> 
 <script src="static/bootstrap.min.js"></script>
+<!--<script type="text/javascript" charset="utf-8">
+    var socket = io.connect('http://' + document.domain + ':' + location.port + '/test');
+        socket.on('connect', function() {
+		        socket.emit('my event', {data: 'I\'m connected!'});
+			    });
+</script>-->
 <script>
 var joystick_activated = false;
 var joystick_x = 200;
@@ -21,17 +27,18 @@ var basic_movement_activated = false;
 $( document ).ready(function() {
     var joystick_offset = $("#direction_joystick").offset();
     
-    var sock_conn = new WebSocket("ws://192.168.1.220/active_update");
+    var socket_conn = io.connect('http://' + document.domain + ':' + location.port + '/active_update');
+    //var sock_conn = new WebSocket("ws://192.168.1.220/active_update");
     
     // Log errors
-    sock_conn.onerror = function (error) {
-        console.log('WebSocket Error: ' + JSON.stringify(error));
-    };
+    //sock_conn.onerror = function (error) {
+    //    console.log('WebSocket Error: ' + JSON.stringify(error));
+    //};
 
     // Log messages from the server
-    sock_conn.onmessage = function (e) {
-        console.log('Server Message: ' + e.data);
-    };
+    //sock_conn.onmessage = function (e) {
+    //    console.log('Server Message: ' + e.data);
+    //};
     
     function handleJoystickMove(eventType,event) {
         if (joystick_activated) {
@@ -58,6 +65,9 @@ $( document ).ready(function() {
             joystick_y = joystick_center_y;
         }
         $("#moveable_joystick").attr("cx",joystick_x).attr("cy",joystick_y);
+	//socket.emit('my event', {data: 'I\'m connected!'});
+        //socket_conn.emit('json',{ "mode":"steering", "speed":'+dist_from_center+',"direction":"fwd", "motor1":"100", "motor2":"100", "motor3":"100", "motor4":"100"});
+        console.log("WebSocket Request Sent. ");
         if (sock_conn.readyState === sock_conn.OPEN) {
             sock_conn.send('{ "mode":"steering", "speed":'+dist_from_center+',direction="fwd", "motor1":"100", "motor2":"100", "motor3":"100", "motor4":"100"}');
             console.log("WebSocket Request Sent. ");
@@ -89,12 +99,13 @@ $( document ).ready(function() {
         }
         if(basic_movement_activated){
             console.log('{ "mode":"steering", "motor1":"'+motor1+'", "motor2":"'+motor2+'", "motor3":"'+motor3+'", "motor4":"'+motor4+'"}');
-            if (sock_conn.readyState === sock_conn.OPEN) {
-                sock_conn.send('{ "mode":"steering", "motor1":"'+motor1+'", "motor2":"'+motor2+'", "motor3":"'+motor3+'", "motor4":"'+motor4+'"}');
-                console.log("WebSocket Request Sent. ");
-            } else {
-                //console.log("WebSocket Connection Status: " + connection_states[sock_conn.readyState]);
-            }
+            socket_conn.emit('json_control',{ "mode":"steering", "motor1":motor1, "motor2":motor2, "motor3":motor3, "motor4":motor4});
+            //if (sock_conn.readyState === sock_conn.OPEN) {
+            //    sock_conn.send('{ "mode":"steering", "motor1":"'+motor1+'", "motor2":"'+motor2+'", "motor3":"'+motor3+'", "motor4":"'+motor4+'"}');
+            //    console.log("WebSocket Request Sent. ");
+            //} else {
+            //    console.log("WebSocket Connection Status: " + connection_states[sock_conn.readyState]);
+            //}
             setTimeout(function(){ handleBasicMotorMovement(speed,direction); }, 10);
         }
     }

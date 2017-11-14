@@ -11,11 +11,11 @@ GPIO.setmode(GPIO.BCM)
 pwm = Adafruit_PCA9685.PCA9685()
 socketio = SocketIO(app)
 
-motor1_speed = 0
-motor2_speed = 0
-motor3_speed = 0
-motor4_speed = 0
-motor_speed_update_id = 0;
+motor_speed_update_id = 0; #incremented for every websocket packet
+motor_pin_list = {12,16,21,20,13,25,26,19}
+for pin in motor_pin_list:
+    GPIO.setup(pin, GPIO.OUT)
+    GPIO.output(pin, False)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -30,16 +30,18 @@ def index():
         display_request_string = "Waiting for request..."
     return render_template('index.html', recieved_request=display_request_string)
 
-@socketio.on('json', namespace='/active_update')
+@socketio.on('my event', namespace='/test')
+def handle_my_custom_namespace_event(json):
+    print 'received json: ' + str(json)
+
+@socketio.on('json_control', namespace='/active_update')
 def handle_json(json_obj):
+    global motor_speed_update_id
+    print 'recieved json control request id:' + str(motor_speed_update_id + 1)
     send('received json: ' + str(json_obj), json=False)
     if json_obj['mode'] == 'steering':
-        live_motor_update(json_obj, motor_speed_update_id)
-        motor1_speed = settings['motor1']
-        motor2_speed = settings['motor2']
-        motor3_speed = settings['motor3']
-        motor4_speed = settings['motor4']
-        motor_speed_update_id += 1
+        #live_motor_update(json_obj, motor_speed_update_id)
+        thread = socketio.start_background_task(settings=json_obj, call_id=motor_speed_update_id, target=live_motor_update)
         
 
 def execute_motor_request(settings):
@@ -49,7 +51,7 @@ def execute_motor_request(settings):
     motor_pins[21] = True if settings['front_left'] == 'fwd' else False
     motor_pins[20] = True if settings['front_left'] == 'rvs' else False
     motor_pins[13] = True if settings['rear_right'] == 'fwd' else False
-    motor_pins[6] = True if settings['rear_right'] == 'rvs' else False
+    motor_pins[25] = True if settings['rear_right'] == 'rvs' else False
     motor_pins[26] = True if settings['rear_left'] == 'fwd' else False
     motor_pins[19] = True if settings['rear_left'] == 'rvs' else False
     for pin, value in motor_pins.items():
@@ -80,31 +82,41 @@ def execute_servo_position_request(settings):
     return 'Success!'
 
 def live_motor_update(settings, call_id):
+    global motor_speed_update_id
+    motor_speed_update_id += 1
+    time_elapsed = 0
     duration = 0.1
     motor_pins = {}
-    motor_pins[12] = settings['motor1'] if settings['motor1'] > 0 else False
-    motor_pins[16] = math.abs(settings['motor1']) if settings['motor1'] < 0 else False
-    motor_pins[21] = settings['motor2'] if settings['motor2'] > 0 else False
-    motor_pins[20] = math.abs(settings['motor2']) if settings['motor2'] < 0 else False
-    motor_pins[13] = settings['motor3'] if settings['motor3'] > 0 else False
-    motor_pins[6] = math.abs(settings['motor3']) if settings['motor3'] < 0 else False
-    motor_pins[26] = settings['motor4'] if settings['motor4'] > 0 else False
-    motor_pins[19] = math.abs(settings['motor4']) if settings['motor4'] < 0 else False
-    for pin, value in motor_pins.items():
-        GPIO.setup(pin, GPIO.OUT)
-        GPIO.output(pin, False)
-    time_elapsed = 0
+    motor_pins[12] = True if settings['motor1'] > 0 else False
+    motor_pins[16] = True if settings['motor1'] < 0 else False
+    motor_pins[21] = True if settings['motor2'] > 0 else False
+    motor_pins[20] = True if settings['motor2'] < 0 else False
+    motor_pins[25] = True if settings['motor3'] > 0 else False
+    motor_pins[13] = True if settings['motor3'] < 0 else False
+    motor_pins[26] = True if settings['motor4'] > 0 else False
+    motor_pins[19] = True if settings['motor4'] < 0 else False
+    print 'Running request id:' + str(motor_speed_update_id + 1)
+    speed = abs(settings['motor1'])
+    print "speed: " + str(speed)
     while time_elapsed < duration:
-        if motor_speed_update_id > call_id:
+        if motor_speed_update_id > call_id + 1:
+            for pin, value in motor_pins.items():
+                GPIO.output(pin, False)
+            print "interupted id:" + str(call_id) + " for id:" + str(motor_speed_update_id)
             return 'New Order!'
         for pin, pin_value in motor_pins.items():
             GPIO.output(pin, pin_value)
-        for i in range(100):
-            time.sleep(0.001)
-            time_elapsed += 0.001
-            for pin, pin_value in motor_pins.items():
-                if pin_value != False and pin_value / 1000 < time_elapsed:
-                    GPIO.output(pin, False)
+            print "Setting pin " + str(pin) + " to " + str(pin_value)
+        time.sleep(speed / 10000.0)
+        print "sleeping for " + str(speed / 10000.0) + " seconds"
+        for pin, pin_value in motor_pins.items():
+            GPIO.output(pin, False)
+        time.sleep(0.01 - speed / 10000.0)
+        print "now sleeping for " + str(0.01 - speed / 10000.0) + " seconds"
+        time_elapsed += 0.01
+
+    for pin, value in motor_pins.items():
+        GPIO.output(pin, False)
     return 'Success!'
     
 
@@ -117,5 +129,4 @@ def inOutCirc(t, b, c, d): #(time,beginning,change,duration)
         return c / 2 * (math.sqrt(1 - t * t) + 1) + b
     
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=80)
-    socketio.run(app)
+    socketio.run(app, debug=True, host='0.0.0.0', port=80)
